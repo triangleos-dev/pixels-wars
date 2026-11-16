@@ -10,4 +10,4 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "pixel-wars"
-database_id = "PASTE_YOUR_DATABASE_ID_HERE"
+database_id = "f6e76dd8-29dd-402f-b7ec-980038f58115"
