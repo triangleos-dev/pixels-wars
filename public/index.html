@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Pixel Wars</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app" hidden>
+  <header>
+    <div class="brand">Pixel Wars</div>
+    <div id="cd" class="cd" title="You can claim one pixel every 10 minutes">
+      <div id="cdBar" class="cd-bar"></div>
+      <span id="cdText">Ready</span>
+    </div>
+    <div class="who"><span id="userName"></span> <button id="logoutBtn" class="ghost">Log out</button></div>
+  </header>
+  <main>
+    <div id="stage">
+      <canvas id="map"></canvas>
+      <div id="tip" hidden></div>
+      <div id="pickHint" hidden>Click the map to choose your spawn point</div>
+      <div class="zoom">
+        <button id="zIn" title="Zoom in">+</button>
+        <button id="zOut" title="Zoom out">&minus;</button>
+        <button id="zFit" title="Fit map">&#9635;</button>
+      </div>
+    </div>
+    <aside id="side">
+      <section id="selBox" class="card"></section>
+
+      <section id="myFaction" class="card" hidden></section>
+
+      <section id="createBox" class="card" hidden>
+        <h3>Create a faction</h3>
+        <label>Name
+          <input id="fName" maxlength="20" placeholder="e.g. Red Empire" autocomplete="off">
+        </label>
+        <div class="lbl">Color <span class="muted">(each color can be used once)</span></div>
+        <div id="palette" class="palette"></div>
+        <label class="colorRow">Custom
+          <input id="fColor" type="color" value="#e6194b">
+        </label>
+        <div class="lbl">Spawn point</div>
+        <div class="row">
+          <button id="pickBtn" class="ghost">Pick on map</button>
+          <span id="spawnLbl" class="muted">not chosen</span>
+        </div>
+        <button id="createBtn" class="primary">Create faction</button>
+        <p class="muted small">Or join an existing faction from the list below.</p>
+      </section>
+
+      <section class="card">
+        <h3>Factions</h3>
+        <div id="board"></div>
+      </section>
+
+      <section class="card small muted">
+        <b>Rules</b><br>
+        One pixel per player every 10 minutes. New pixels must touch your faction's land. You can capture enemy pixels, except their capital (&#9670;).
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div id="auth">
+  <form id="authForm" class="authBox">
+    <h1>Pixel Wars</h1>
+    <p class="muted">A 100&times;100 battlefield. Create an account to play.</p>
+    <div class="tabs">
+      <button type="button" id="tabLogin" class="tab on">Log in</button>
+      <button type="button" id="tabReg" class="tab">Register</button>
+    </div>
+    <input id="aUser" placeholder="Username" autocomplete="username" maxlength="20" required>
+    <input id="aPass" type="password" placeholder="Password" autocomplete="current-password" minlength="6" maxlength="72" required>
+    <input id="aPass2" type="password" placeholder="Repeat password" autocomplete="new-password" hidden>
+    <div id="authErr" class="error"></div>
+    <button id="authBtn" class="primary" type="submit">Log in</button>
+  </form>
+</div>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
