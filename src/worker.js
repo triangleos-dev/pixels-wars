@@ -1,7 +1,7 @@
 // Pixel Wars backend: Cloudflare Worker + D1 (free plan compatible)
 
 const SIZE = 100;
-const COOLDOWN = 4 * 60 * 1000; // 1 pixel per player per 4 minutes
+const COOLDOWN = 1 * 60 * 1000; // 1 pixel per player per 4 minutes
 // Names nobody can register normally; creating one needs the admin key.
 const RESERVED = ['triangle', 'admin', 'administrator', 'moderator', 'mod', 'system', 'staff'];
 const SESSION_MS = 30 * 24 * 3600 * 1000;
