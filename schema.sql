@@ -5,9 +5,13 @@ CREATE TABLE IF NOT EXISTS users (
   pass_hash TEXT NOT NULL,
   faction_id INTEGER,
   last_move INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  ip_hash TEXT,
+  banned INTEGER NOT NULL DEFAULT 0,
+  ban_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_users_faction ON users(faction_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_ip ON users(ip_hash);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,

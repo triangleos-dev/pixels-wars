@@ -55,6 +55,11 @@ async function api(path, body) {
     showAuth();
     throw new Error('auth');
   }
+  if (r.status === 403 && d.code === 'banned' && path !== '/login') {
+    showAuth();
+    $('#authErr').textContent = d.error;
+    throw new Error('auth');
+  }
   if (!r.ok) {
     const e = new Error(d.error || 'Something went wrong');
     e.data = d;
@@ -94,7 +99,17 @@ $('#authForm').onsubmit = async (e) => {
   }
   $('#authBtn').disabled = true;
   try {
-    await api(regMode ? '/register' : '/login', { username, password });
+    const body = { username, password };
+    try {
+      await api(regMode ? '/register' : '/login', body);
+    } catch (err) {
+      // Reserved names (like the owner's) are unlocked with the admin key.
+      if (!(regMode && err.data && err.data.code === 'reserved')) throw err;
+      const key = prompt('This name is reserved. Enter the admin key to create it:');
+      if (!key) throw err;
+      body.admin_key = key;
+      await api('/register', body);
+    }
     $('#aPass').value = $('#aPass2').value = '';
     await poll(true);
   } catch (err) {
@@ -580,11 +595,65 @@ function renderBoard() {
   });
 }
 
+/* ---------- Players list ---------- */
+const P = { list: [], tab: 'f', at: 0, busy: false, lastFid: undefined };
+
+async function loadPlayers(force) {
+  if (P.busy || (!force && Date.now() - P.at < 15000)) return;
+  P.busy = true;
+  try {
+    const d = await api('/players');
+    P.list = d.players;
+    P.at = Date.now();
+    renderPlayers();
+  } catch { /* ignore */ } finally { P.busy = false; }
+}
+
+function setListTab(t) {
+  P.tab = t;
+  $('#tabF').classList.toggle('on', t === 'f');
+  $('#tabP').classList.toggle('on', t === 'p');
+  $('#board').hidden = t !== 'f';
+  $('#playersBox').hidden = t !== 'p';
+  if (t === 'p') { loadPlayers(true); renderPlayers(); }
+}
+$('#tabF').onclick = () => setListTab('f');
+$('#tabP').onclick = () => setListTab('p');
+$('#pSearch').oninput = renderPlayers;
+setInterval(() => { if (P.tab === 'p' && !document.hidden && !$('#app').hidden) loadPlayers(); }, 5000);
+
+function renderPlayers() {
+  $('#pCount').textContent = P.list.length ? `(${P.list.length})` : '';
+  if (P.tab !== 'p' || !S.me) return;
+  const q = $('#pSearch').value.trim().toLowerCase();
+  const box = $('#plist');
+  box.replaceChildren();
+  let n = 0;
+  for (const [name, fid] of P.list) {
+    const fa = fid && S.factions.get(fid);
+    if (q && !name.toLowerCase().includes(q) && !(fa && fa.name.toLowerCase().includes(q)) && !(q === 'none' && !fa)) continue;
+    n++;
+    const row = el('div', { class: 'pRow' + (fa ? ' clickable' : '') + (name.toLowerCase() === S.me.username.toLowerCase() ? ' me' : '') },
+      el('span', { class: 'dot', style: `background:${fa ? fa.color : 'transparent'};margin:0` }),
+      el('span', { class: 'nm', title: name }, name),
+      el('span', { class: 'fn', title: fa ? fa.name : '' }, fa ? fa.name : 'no faction'));
+    if (fa) row.onclick = () => focusOn(fa.cx, fa.cy);
+    box.append(row);
+  }
+  if (!n) box.append(el('div', { class: 'muted' }, 'No players found.'));
+}
+
 function renderAll() {
   renderTop();
   renderMyFaction();
   renderBoard();
   renderSel();
+  if (P.lastFid !== S.me.faction_id) {
+    // Joined / left / created a faction: the players list is stale.
+    if (P.lastFid !== undefined || P.tab === 'p') loadPlayers(true);
+    P.lastFid = S.me.faction_id;
+  }
+  renderPlayers();
 }
 
 /* ---------- Boot ---------- */

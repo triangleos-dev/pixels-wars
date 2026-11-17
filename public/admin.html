@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pixel Wars - Admin</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { overflow: auto; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 18px 14px 60px; }
+  .bar { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+  .bar input { flex: 1; min-width: 180px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  tr.banned td { background: rgba(255,107,107,.07); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+  .tag.bad { color: var(--bad); border-color: #6a2f3a; }
+  .stats { color: var(--muted); margin-left: auto; align-self: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Admin panel</h1>
+  <p class="muted"><a href="/" style="color:var(--accent)">&larr; Back to the game</a></p>
+
+  <form id="keyForm" class="card">
+    <h3>Admin key</h3>
+    <div class="row">
+      <input id="key" type="password" placeholder="Paste your ADMIN_KEY" autocomplete="current-password">
+      <button class="primary" style="width:auto;margin:0">Unlock</button>
+    </div>
+    <div id="keyErr" class="error"></div>
+  </form>
+
+  <div id="panel" hidden>
+    <div class="bar">
+      <input id="q" placeholder="Search by username or faction" autocomplete="off">
+      <button id="refresh" class="ghost">Refresh</button>
+      <button id="lock" class="ghost">Lock</button>
+      <span class="stats" id="stats"></span>
+    </div>
+    <div class="card" style="padding:4px 10px">
+      <table>
+        <thead><tr><th>Player</th><th>Faction</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/admin.js"></script>
+</body>
+</html>

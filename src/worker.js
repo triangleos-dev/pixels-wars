@@ -1,7 +1,9 @@
 // Pixel Wars backend: Cloudflare Worker + D1 (free plan compatible)
 
 const SIZE = 100;
-const COOLDOWN = 10 * 60 * 1000; // 1 pixel per player per 10 minutes
+const COOLDOWN = 4 * 60 * 1000; // 1 pixel per player per 4 minutes
+// Names nobody can register normally; creating one needs the admin key.
+const RESERVED = ['triangle', 'admin', 'administrator', 'moderator', 'mod', 'system', 'staff'];
 const SESSION_MS = 30 * 24 * 3600 * 1000;
 const PBKDF2_ITER = 100000; // Workers maximum
 const MIN_COLOR_DISTANCE = 30; // RGB distance; blocks near-identical colors
@@ -56,12 +58,28 @@ function getCookie(req, name) {
   return null;
 }
 
+// One account per IP: we store only a peppered hash of the address (IPv6 → /64 prefix).
+function clientIp(req) {
+  const ip = req.headers.get('cf-connecting-ip');
+  if (!ip) return null;
+  if (ip.includes(':')) return ip.split(':').slice(0, 4).join(':'); // good enough /64
+  return ip;
+}
+async function ipHash(req, env) {
+  const ip = clientIp(req);
+  return ip ? sha('ip:' + (env.ADMIN_KEY || '') + ':' + ip) : null;
+}
+async function isAdminKey(key, env) {
+  if (!env.ADMIN_KEY || typeof key !== 'string' || !key) return false;
+  return safeEqual(await sha(key), await sha(env.ADMIN_KEY));
+}
+
 async function getUser(req, env) {
   const token = getCookie(req, 'sid');
   if (!token) return null;
   const th = await sha(token);
   return env.DB.prepare(
-    'SELECT u.id, u.username, u.faction_id, u.last_move FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?1 AND s.expires > ?2'
+    'SELECT u.id, u.username, u.faction_id, u.last_move, u.banned, u.ban_reason FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?1 AND s.expires > ?2'
   )
     .bind(th, Date.now())
     .first();
@@ -92,14 +110,29 @@ async function register(req, env) {
   const password = String(b.password || '');
   if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) return err('Username: 3-20 letters, digits or underscore');
   if (password.length < 6 || password.length > 72) return err('Password must be 6-72 characters');
+  // Reserved names (e.g. "triangle") need the admin key; that account is exempt from the IP limit.
+  let isAdminAccount = false;
+  if (RESERVED.includes(username.toLowerCase())) {
+    if (!(await isAdminKey(b.admin_key, env)))
+      return json({ error: 'This username is reserved', code: 'reserved' }, 403);
+    isAdminAccount = true;
+  }
+  const ih = isAdminAccount ? null : await ipHash(req, env);
+  if (ih) {
+    const used = await env.DB.prepare('SELECT 1 FROM users WHERE ip_hash = ?1').bind(ih).first();
+    if (used) return err('Only one account per IP address is allowed', 409);
+  }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hash = await hashPw(password, salt);
   let res;
   try {
-    res = await env.DB.prepare('INSERT INTO users(username, salt, pass_hash, created_at) VALUES(?1, ?2, ?3, ?4)')
-      .bind(username, b64(salt), hash, Date.now())
+    res = await env.DB.prepare(
+      'INSERT INTO users(username, salt, pass_hash, ip_hash, created_at) VALUES(?1, ?2, ?3, ?4, ?5)'
+    )
+      .bind(username, b64(salt), hash, ih, Date.now())
       .run();
-  } catch {
+  } catch (e) {
+    if (String(e && e.message).includes('ip_hash')) return err('Only one account per IP address is allowed', 409);
     return err('Username already taken', 409);
   }
   return startSession(env, res.meta.last_row_id);
@@ -109,12 +142,26 @@ async function login(req, env) {
   const b = await readBody(req);
   const username = String(b.username || '').trim();
   const password = String(b.password || '');
-  const u = await env.DB.prepare('SELECT id, salt, pass_hash FROM users WHERE username = ?1').bind(username).first();
+  const u = await env.DB.prepare('SELECT id, salt, pass_hash, ip_hash, banned, ban_reason FROM users WHERE username = ?1')
+    .bind(username)
+    .first();
   if (!u) return err('Wrong username or password', 401);
   const hash = await hashPw(password, unb64(u.salt));
   if (!safeEqual(hash, u.pass_hash)) return err('Wrong username or password', 401);
+  if (u.banned) return json({ error: banMessage(u.ban_reason), code: 'banned' }, 403);
+  // Accounts created before the IP limit existed get their IP recorded on first login (if still free).
+  if (!u.ip_hash && !RESERVED.includes(username.toLowerCase())) {
+    const ih = await ipHash(req, env);
+    if (ih) {
+      try {
+        await env.DB.prepare('UPDATE users SET ip_hash = ?1 WHERE id = ?2 AND ip_hash IS NULL').bind(ih, u.id).run();
+      } catch { /* another account already uses this IP: leave it unset */ }
+    }
+  }
   return startSession(env, u.id);
 }
+
+const banMessage = (reason) => 'This account is banned' + (reason ? ': ' + reason : '');
 
 async function logout(req, env) {
   const token = getCookie(req, 'sid');
@@ -204,10 +251,8 @@ async function joinFaction(req, user, env) {
   return json({ ok: true });
 }
 
-async function leaveFaction(user, env) {
-  const fid = user.faction_id;
-  if (!fid) return err('You are not in a faction');
-  await env.DB.prepare('UPDATE users SET faction_id = NULL WHERE id = ?1').bind(user.id).run();
+async function removeFromFaction(env, userId, fid) {
+  await env.DB.prepare('UPDATE users SET faction_id = NULL WHERE id = ?1').bind(userId).run();
   const left = await env.DB.prepare('SELECT COUNT(*) n FROM users WHERE faction_id = ?1').bind(fid).first();
   if (left.n === 0) {
     // Empty faction dissolves; its land becomes neutral again.
@@ -219,7 +264,54 @@ async function leaveFaction(user, env) {
       env.DB.prepare('DELETE FROM factions WHERE id = ?1').bind(fid),
     ]);
   }
+}
+
+async function leaveFaction(user, env) {
+  const fid = user.faction_id;
+  if (!fid) return err('You are not in a faction');
+  await removeFromFaction(env, user.id, fid);
   return json({ ok: true });
+}
+
+// Player list with each player's faction (banned players are hidden).
+async function players(env) {
+  const rows = await env.DB.prepare(
+    'SELECT u.username n, u.faction_id f FROM users u WHERE u.banned = 0 ORDER BY u.username COLLATE NOCASE LIMIT 1000'
+  ).all();
+  return json({ players: rows.results.map((r) => [r.n, r.f || 0]) });
+}
+
+/* ---------- Admin (protected by the ADMIN_KEY secret, sent in the x-admin-key header) ---------- */
+async function admin(req, url, env) {
+  if (!(await isAdminKey(req.headers.get('x-admin-key'), env))) return err('Wrong admin key', 403);
+  const p = url.pathname;
+
+  if (req.method === 'GET' && p === '/api/admin/users') {
+    const rows = await env.DB.prepare(
+      'SELECT u.id, u.username, u.faction_id, f.name faction, f.color, u.banned, u.ban_reason, u.created_at, u.last_move FROM users u LEFT JOIN factions f ON f.id = u.faction_id ORDER BY u.banned DESC, u.created_at DESC LIMIT 2000'
+    ).all();
+    return json({ users: rows.results, reserved: RESERVED });
+  }
+
+  if (req.method === 'POST' && (p === '/api/admin/ban' || p === '/api/admin/unban')) {
+    const b = await readBody(req);
+    const id = Number(b.user_id);
+    const u = await env.DB.prepare('SELECT id, username, faction_id FROM users WHERE id = ?1').bind(id).first();
+    if (!u) return err('User not found', 404);
+    if (RESERVED.includes(u.username.toLowerCase())) return err('Cannot ban a reserved/admin account');
+    if (p === '/api/admin/unban') {
+      await env.DB.prepare('UPDATE users SET banned = 0, ban_reason = NULL WHERE id = ?1').bind(id).run();
+      return json({ ok: true });
+    }
+    const reason = String(b.reason || '').trim().slice(0, 120) || null;
+    await env.DB.batch([
+      env.DB.prepare('UPDATE users SET banned = 1, ban_reason = ?1 WHERE id = ?2').bind(reason, id),
+      env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1').bind(id), // log them out everywhere
+    ]);
+    if (u.faction_id) await removeFromFaction(env, id, u.faction_id);
+    return json({ ok: true });
+  }
+  return err('Not found', 404);
 }
 
 async function claimPixel(req, user, env) {
@@ -293,10 +385,14 @@ async function route(req, env) {
   if (m === 'POST' && p === '/api/login') return login(req, env);
   if (m === 'POST' && p === '/api/logout') return logout(req, env);
 
+  if (p.startsWith('/api/admin/')) return admin(req, url, env);
+
   const user = await getUser(req, env);
   if (!user) return err('Not logged in', 401);
+  if (user.banned) return json({ error: banMessage(user.ban_reason), code: 'banned' }, 403);
 
   if (m === 'GET' && p === '/api/state') return state(url, user, env);
+  if (m === 'GET' && p === '/api/players') return players(env);
   if (m === 'POST' && p === '/api/faction/create') return createFaction(req, user, env);
   if (m === 'POST' && p === '/api/faction/join') return joinFaction(req, user, env);
   if (m === 'POST' && p === '/api/faction/leave') return leaveFaction(user, env);

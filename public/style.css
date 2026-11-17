@@ -68,6 +68,15 @@ main { flex: 1; display: flex; min-height: 0; }
 .fRow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fRow .st { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .fRow button { padding: 3px 9px; font-size: 12px; }
+.listTabs { margin-bottom: 10px; }
+#pSearch { margin-bottom: 8px; }
+#plist { max-height: 340px; overflow-y: auto; }
+.pRow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; }
+.pRow.clickable { cursor: pointer; }
+.pRow.clickable:hover { background: rgba(255,255,255,.05); }
+.pRow.me { background: rgba(91,140,255,.12); }
+.pRow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pRow .fn { color: var(--muted); font-size: 12px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank { width: 18px; color: var(--muted); font-size: 12px; text-align: right; }
 
 #tip { position: absolute; pointer-events: none; z-index: 5; background: rgba(10,13,24,.95); border: 1px solid var(--line);

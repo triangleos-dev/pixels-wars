@@ -10,7 +10,7 @@
 <div id="app" hidden>
   <header>
     <div class="brand">Pixel Wars</div>
-    <div id="cd" class="cd" title="You can claim one pixel every 10 minutes">
+    <div id="cd" class="cd" title="You can claim one pixel every 4 minutes">
       <div id="cdBar" class="cd-bar"></div>
       <span id="cdText">Ready</span>
     </div>
@@ -52,13 +52,20 @@
       </section>
 
       <section class="card">
-        <h3>Factions</h3>
+        <div class="tabs listTabs">
+          <button type="button" id="tabF" class="tab on">Factions</button>
+          <button type="button" id="tabP" class="tab">Players <span id="pCount" class="muted"></span></button>
+        </div>
         <div id="board"></div>
+        <div id="playersBox" hidden>
+          <input id="pSearch" placeholder="Search players or factions" autocomplete="off">
+          <div id="plist"></div>
+        </div>
       </section>
 
       <section class="card small muted">
         <b>Rules</b><br>
-        One pixel per player every 10 minutes. New pixels must touch your faction's land. You can capture enemy pixels, except their capital (&#9670;).
+        One pixel per player every 4 minutes. One account per IP address. New pixels must touch your faction's land. You can capture enemy pixels, except their capital (&#9670;).
       </section>
     </aside>
   </main>
