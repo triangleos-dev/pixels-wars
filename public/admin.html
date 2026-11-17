@@ -18,6 +18,10 @@
   .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
   .tag.bad { color: var(--bad); border-color: #6a2f3a; }
   .stats { color: var(--muted); margin-left: auto; align-self: center; }
+  .tools { margin-top: 14px; }
+  .tools .row input[type=number] { width: 25%; }
+  select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0e1322; color: var(--text); flex: 1; min-width: 0; }
+  td .act { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -35,8 +39,33 @@
   </form>
 
   <div id="panel" hidden>
+    <div class="card tools">
+      <h3>Map tools</h3>
+      <div class="muted small" style="margin-bottom:8px">Rectangle from (x1, y1) to (x2, y2), 0-99. For a single pixel use the same numbers twice. Hover a pixel in the game to read its coordinates. Capitals are never overwritten or cleared here.</div>
+      <div class="row">
+        <input id="x1" type="number" min="0" max="99" placeholder="x1"><input id="y1" type="number" min="0" max="99" placeholder="y1">
+        <input id="x2" type="number" min="0" max="99" placeholder="x2"><input id="y2" type="number" min="0" max="99" placeholder="y2">
+      </div>
+      <div class="row">
+        <select id="fSel"></select>
+        <button id="giveBtn" class="primary" style="width:auto;margin:0">Give to faction</button>
+        <button id="clearBtn" class="danger">Clear (make neutral)</button>
+      </div>
+      <div class="row">
+        <button id="delFBtn" class="danger">Destroy selected faction</button>
+        <button id="resetBtn" class="danger">Reset whole map&hellip;</button>
+      </div>
+      <h3 style="margin-top:14px">Announcement</h3>
+      <div class="row">
+        <input id="annText" maxlength="200" placeholder="Shown at the top of the game for everyone">
+        <button id="annSave" class="primary" style="width:auto;margin:0">Publish</button>
+        <button id="annClear" class="ghost">Remove</button>
+      </div>
+    </div>
+
     <div class="bar">
       <input id="q" placeholder="Search by username or faction" autocomplete="off">
+      <label class="small" style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="sus" type="checkbox" style="width:auto"> Same-device only</label>
       <button id="refresh" class="ghost">Refresh</button>
       <button id="lock" class="ghost">Lock</button>
       <span class="stats" id="stats"></span>

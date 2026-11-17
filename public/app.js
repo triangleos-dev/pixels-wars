@@ -148,6 +148,7 @@ function applyState(d) {
     S.cap[y * N + x] = c;
   }
   S.cursor = d.cursor;
+  S.announcement = d.announcement || '';
   rebuild();
   renderAll();
 }
@@ -179,13 +180,14 @@ function tickCooldown() {
   if (!S.me) return;
   const r = remaining();
   const box = $('#cd');
+  const bonus = S.me.bonus_moves > 0 ? ` (+${S.me.bonus_moves} bonus)` : '';
   if (r <= 0) {
     box.classList.add('ready');
-    $('#cdText').textContent = 'Ready to claim';
+    $('#cdText').textContent = 'Ready to claim' + bonus;
   } else {
     box.classList.remove('ready');
     const s = Math.ceil(r / 1000);
-    $('#cdText').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    $('#cdText').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') + bonus;
     $('#cdBar').style.width = (100 * (1 - r / S.cooldown)).toFixed(1) + '%';
   }
   const btn = $('#claimBtn');
@@ -400,7 +402,7 @@ function showTip(e, c, f) {
   if (f && S.factions.has(f)) {
     const fa = S.factions.get(f);
     tip.append(coords, el('span', { class: 'dot', style: `background:${fa.color}` }), el('b', {}, fa.name));
-    if (S.cap[c.y * N + c.x]) tip.append(' ◆ capital');
+    if (S.cap[c.y * N + c.x]) tip.append(' ◆ capital' + (fa.shield_until > nowMs() ? ' (shielded)' : ''));
     tip.append(el('div', { class: 'muted small' }, `${fa.pixels} px · ${fa.members} member${fa.members === 1 ? '' : 's'}`));
   } else {
     tip.append(coords, 'Unclaimed');
@@ -451,8 +453,12 @@ function updateClaimBtn(btn) {
   let label = 'Claim this pixel', ok = true;
   if (!mine) { label = 'Join a faction first'; ok = false; }
   else if (f === mine) { label = 'Already yours'; ok = false; }
-  else if (S.cap[c.y * N + c.x]) { label = 'Capital is protected'; ok = false; }
-  else if (remaining() > 0) { label = 'Cooldown active'; ok = false; }
+  else if (S.cap[c.y * N + c.x] && S.factions.get(f) && S.factions.get(f).shield_until > nowMs()) {
+    label = `Capital shielded (${Math.ceil((S.factions.get(f).shield_until - nowMs()) / 60000)} min)`; ok = false;
+  }
+  else if (remaining() > 0 && !(S.me.bonus_moves > 0)) { label = 'Cooldown active'; ok = false; }
+  else if (S.cap[c.y * N + c.x]) label = 'Capture capital!';
+  else if (remaining() > 0) label = 'Claim (use bonus pixel)';
   btn.textContent = label;
   btn.disabled = !ok;
 }
@@ -476,11 +482,12 @@ function renderSel() {
   box.append(owner);
   const btn = el('button', { id: 'claimBtn', class: 'primary' }, 'Claim this pixel');
   btn.onclick = async () => {
+    if (S.cap[c.y * N + c.x] && !confirm('Capturing the capital destroys the entire faction. Do it?')) return;
     btn.disabled = true;
     try {
       const r = await api('/claim', { x: c.x, y: c.y });
       S.me.next_at = r.next_at;
-      toast('Pixel claimed!', 'good');
+      toast(r.fell ? 'Capital captured! The faction has fallen.' : 'Pixel claimed!', 'good');
     } catch (e) {
       if (e.data && e.data.next_at) S.me.next_at = e.data.next_at;
       toast(e.message);
@@ -494,6 +501,9 @@ function renderSel() {
 
 function renderTop() {
   $('#userName').textContent = S.me.username;
+  const bn = $('#banner');
+  bn.textContent = S.announcement || '';
+  bn.hidden = !S.announcement;
   tickCooldown();
 }
 
@@ -573,14 +583,21 @@ function renderBoard() {
   const list = [...S.factions.values()];
   if (!list.length) { b.append(el('div', { class: 'muted' }, 'No factions yet. Create the first one!')); return; }
   const mine = S.me.faction_id;
+  const wait = S.me.join_at - nowMs();
+  const locked = !mine && wait > 0;
+  if (locked) {
+    b.append(el('div', { class: 'muted small', style: 'margin-bottom:8px' },
+      `New accounts can join a faction after ${Math.ceil(wait / 60000)} min. You can create your own faction right now.`));
+  }
   list.forEach((f, i) => {
     const row = el('div', { class: 'fRow' + (f.id === mine ? ' mine' : '') },
       el('span', { class: 'rank' }, String(i + 1)),
       el('span', { class: 'dot', style: `background:${f.color};margin:0` }),
       el('span', { class: 'nm', title: f.name }, f.name),
-      el('span', { class: 'st' }, `${f.pixels}px · ${f.members}👤`));
+      el('span', { class: 'st' }, `${f.pixels}px (${(f.pixels / 100).toFixed(1)}%) · ${f.members}👤`));
     if (!mine) {
       row.append(el('button', {
+        ...(locked ? { disabled: '', title: 'New accounts must wait before joining a faction' } : {}),
         onclick: async (ev) => {
           ev.stopPropagation();
           try { await api('/faction/join', { faction_id: f.id }); toast('Joined ' + f.name, 'good'); } catch (e) { toast(e.message); }
@@ -596,7 +613,7 @@ function renderBoard() {
 }
 
 /* ---------- Players list ---------- */
-const P = { list: [], tab: 'f', at: 0, busy: false, lastFid: undefined };
+const P = { list: [], tab: 'f', at: 0, busy: false, lastFid: undefined, sort: 'az' };
 
 async function loadPlayers(force) {
   if (P.busy || (!force && Date.now() - P.at < 15000)) return;
@@ -613,12 +630,58 @@ function setListTab(t) {
   P.tab = t;
   $('#tabF').classList.toggle('on', t === 'f');
   $('#tabP').classList.toggle('on', t === 'p');
+  $('#tabE').classList.toggle('on', t === 'e');
   $('#board').hidden = t !== 'f';
   $('#playersBox').hidden = t !== 'p';
+  $('#feedBox').hidden = t !== 'e';
   if (t === 'p') { loadPlayers(true); renderPlayers(); }
+  if (t === 'e') loadFeed();
 }
 $('#tabF').onclick = () => setListTab('f');
 $('#tabP').onclick = () => setListTab('p');
+$('#tabE').onclick = () => setListTab('e');
+$('#pSort').onclick = () => {
+  P.sort = P.sort === 'az' ? 'top' : 'az';
+  $('#pSort').textContent = P.sort === 'az' ? 'A-Z' : 'Top';
+  renderPlayers();
+};
+
+/* ---------- Capture feed ---------- */
+const FEED = { list: [], last: 0, busy: false };
+function ago(t) {
+  const s = Math.max(0, Math.round((nowMs() - t) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+async function loadFeed() {
+  if (FEED.busy) return;
+  FEED.busy = true;
+  try {
+    const d = await api('/feed?since=' + FEED.last);
+    if (d.events.length) {
+      FEED.list = FEED.list.concat(d.events).slice(-60);
+      FEED.last = FEED.list[FEED.list.length - 1].id;
+    }
+  } catch { /* ignore */ } finally { FEED.busy = false; }
+  renderFeed();
+}
+setInterval(() => { if (P.tab === 'e' && !document.hidden && !$('#app').hidden) loadFeed(); }, 5000);
+function renderFeed() {
+  const box = $('#feedList');
+  box.replaceChildren();
+  if (!FEED.list.length) { box.append(el('div', { class: 'muted' }, 'No captures yet.')); return; }
+  for (const e of FEED.list.slice().reverse()) {
+    const dot = (c) => el('span', { class: 'dot', style: `background:${c}` });
+    const row = el('div', { class: 'eRow' + (e.kind === 'fall' ? ' fall' : '') },
+      dot(e.ca), el('b', {}, e.fa), e.kind === 'fall' ? ' destroyed ' : ' captured ', dot(e.cv), el('b', {}, e.fv),
+      e.kind === 'fall' ? ' by taking its capital' : ` at (${e.x}, ${e.y})`,
+      el('div', { class: 'when' }, `${e.actor} · ${ago(e.t)}`));
+    row.onclick = () => focusOn(e.x, e.y);
+    box.append(row);
+  }
+}
 $('#pSearch').oninput = renderPlayers;
 setInterval(() => { if (P.tab === 'p' && !document.hidden && !$('#app').hidden) loadPlayers(); }, 5000);
 
@@ -629,14 +692,16 @@ function renderPlayers() {
   const box = $('#plist');
   box.replaceChildren();
   let n = 0;
-  for (const [name, fid] of P.list) {
+  const rows = P.sort === 'top' ? P.list.slice().sort((a, b) => b[2] - a[2] || a[0].localeCompare(b[0])) : P.list;
+  for (const [name, fid, claims] of rows) {
     const fa = fid && S.factions.get(fid);
     if (q && !name.toLowerCase().includes(q) && !(fa && fa.name.toLowerCase().includes(q)) && !(q === 'none' && !fa)) continue;
     n++;
     const row = el('div', { class: 'pRow' + (fa ? ' clickable' : '') + (name.toLowerCase() === S.me.username.toLowerCase() ? ' me' : '') },
       el('span', { class: 'dot', style: `background:${fa ? fa.color : 'transparent'};margin:0` }),
       el('span', { class: 'nm', title: name }, name),
-      el('span', { class: 'fn', title: fa ? fa.name : '' }, fa ? fa.name : 'no faction'));
+      el('span', { class: 'fn', title: fa ? fa.name : '' }, fa ? fa.name : 'no faction'),
+      el('span', { class: 'cl' + (P.sort === 'top' ? ' top' : ''), title: 'pixels claimed' }, String(claims)));
     if (fa) row.onclick = () => focusOn(fa.cx, fa.cy);
     box.append(row);
   }

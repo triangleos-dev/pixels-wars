@@ -10,12 +10,13 @@
 <div id="app" hidden>
   <header>
     <div class="brand">Pixel Wars</div>
-    <div id="cd" class="cd" title="You can claim one pixel every 4 minutes">
+    <div id="cd" class="cd" title="You can claim one pixel every minute">
       <div id="cdBar" class="cd-bar"></div>
       <span id="cdText">Ready</span>
     </div>
     <div class="who"><span id="userName"></span> <button id="logoutBtn" class="ghost">Log out</button></div>
   </header>
+  <div id="banner" hidden></div>
   <main>
     <div id="stage">
       <canvas id="map"></canvas>
@@ -55,17 +56,24 @@
         <div class="tabs listTabs">
           <button type="button" id="tabF" class="tab on">Factions</button>
           <button type="button" id="tabP" class="tab">Players <span id="pCount" class="muted"></span></button>
+          <button type="button" id="tabE" class="tab">Feed</button>
         </div>
         <div id="board"></div>
+        <div id="feedBox" hidden>
+          <div id="feedList"></div>
+        </div>
         <div id="playersBox" hidden>
-          <input id="pSearch" placeholder="Search players or factions" autocomplete="off">
+          <div class="row" style="margin-bottom:8px">
+            <input id="pSearch" placeholder="Search players or factions" autocomplete="off">
+            <button id="pSort" class="ghost" type="button" style="white-space:nowrap" title="Change sorting">A-Z</button>
+          </div>
           <div id="plist"></div>
         </div>
       </section>
 
       <section class="card small muted">
         <b>Rules</b><br>
-        One pixel per player every 4 minutes. One account per IP address. New pixels must touch your faction's land. You can capture enemy pixels, except their capital (&#9670;).
+        One pixel per player every minute. One account per player. New accounts can create a faction right away but can only join one after 1 hour. New pixels must touch your faction's land. You can capture enemy pixels. <b>If a faction's capital (&#9670;) is captured, the whole faction falls</b>: its land becomes neutral and its members are left without a faction. A new faction's capital is shielded for its first hour.
       </section>
     </aside>
   </main>

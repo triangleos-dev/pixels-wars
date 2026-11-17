@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
   created_at INTEGER NOT NULL,
   ip_hash TEXT,
   banned INTEGER NOT NULL DEFAULT 0,
-  ban_reason TEXT
+  ban_reason TEXT,
+  bonus_moves INTEGER NOT NULL DEFAULT 0,
+  claims INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_users_faction ON users(faction_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_ip ON users(ip_hash);
@@ -38,3 +40,28 @@ CREATE TABLE IF NOT EXISTS pixels (
   PRIMARY KEY (x, y)
 );
 CREATE INDEX IF NOT EXISTS idx_pixels_updated ON pixels(updated_at);
+
+CREATE TABLE IF NOT EXISTS user_devices (
+  user_id INTEGER NOT NULL,
+  device_hash TEXT NOT NULL,
+  first_seen INTEGER NOT NULL,
+  PRIMARY KEY (user_id, device_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_devices_hash ON user_devices(device_hash);
+
+CREATE INDEX IF NOT EXISTS idx_pixels_faction ON pixels(faction_id);
+
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  t INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  actor TEXT,
+  fa TEXT, ca TEXT,
+  fv TEXT, cv TEXT,
+  x INTEGER, y INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
+);
